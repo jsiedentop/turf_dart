@@ -267,7 +267,7 @@ class Position extends CoordinateType {
   int get hashCode => Object.hashAll(_items);
 
   @override
-  bool operator ==(dynamic other) => other is Position
+  bool operator ==(Object other) => other is Position
       ? lng == other.lng && lat == other.lat && alt == other.alt
       : false;
 }
@@ -278,6 +278,8 @@ class Position extends CoordinateType {
 /// You can either specify 4 or 6 parameters
 /// If you are using the default constructor with two dimensional positions (lng + lat only), please use the constructor like this:
 /// `BBox(lng1, lat1, lng2, lat2);`
+
+// ToDo: different constructors for 2D and 3D positions!
 class BBox extends CoordinateType {
   BBox(
     /// longitude 1
@@ -679,11 +681,11 @@ class Feature<T extends GeometryObject> extends GeoJSONObject {
   int get hashCode => Object.hash(type, id);
 
   @override
-  bool operator ==(dynamic other) => other is Feature ? id == other.id : false;
+  bool operator ==(Object other) => other is Feature ? id == other.id : false;
 
   @override
   Map<String, dynamic> toJson() => super.serialize({
-        'id': id,
+        if (id != null) 'id': id,
         'geometry': geometry!.toJson(),
         'properties': properties,
         ...fields,
