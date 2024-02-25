@@ -1,120 +1,9 @@
-import 'dart:convert';
-
 import 'package:rbush/rbush.dart';
-//import 'package:turf/bbox.dart';
 import 'package:turf/boolean.dart';
-//import 'package:turf/helpers.dart';
 import 'package:turf/line_segment.dart';
 import 'package:turf/meta.dart';
-//import 'package:turf/nearest_point_on_line.dart';
 import 'package:turf/turf.dart';
-import 'package:turf_equality/turf_equality.dart';
-
 import 'invariant.dart';
-
-logFeature(String info, Feature? feature) => logJson(info, feature?.toJson());
-logCollection(String info, FeatureCollection? feature) =>
-    logJson(info, feature?.toJson());
-logJson(String info, Map<String, dynamic>? json) {
-  print(info);
-  if (json == null) {
-    print("(null)");
-  } else {
-    final jsonString = jsonEncode(json);
-    final urlString =
-        "http://geojson.io/#data=data:application/json,${Uri.encodeComponent(jsonString)}";
-    print(urlString);
-  }
-  print(".\n");
-}
-
-bool _equal(List<Position> first, List<Position> second) {
-  Equality eq = Equality();
-  final result = eq.compare(
-    LineString(coordinates: first),
-    LineString(coordinates: second),
-  );
-  //final a = Feature(
-  //  geometry: LineString(coordinates: first),
-  //  properties: {"stroke": "#F00", "fill": "#F00", "stroke-width": "25"},
-  // );
-  // final b = Feature(geometry: LineString(coordinates: second));
-  // final feature = FeatureCollection(features: [a, b]);
-  // logCollection("equal == $result", feature);
-
-  return result;
-}
-
-class FeatureRBush {
-  FeatureRBush._(this._tree);
-  final RBushBase<List<List<double>>> _tree;
-
-  static FeatureRBush create(FeatureCollection<LineString> segments) {
-    final tree = RBushBase<List<List<double>>>(
-      maxEntries: 4,
-      toBBox: (segment) => RBushBox.fromList(_bbox(segment)),
-      getMinX: (segment) => RBushBox.fromList(_bbox(segment)).minX,
-      getMinY: (segment) => RBushBox.fromList(_bbox(segment)).minY,
-    );
-
-    final line1Segments = segments.features.map((e) {
-      final line = e.geometry as LineString;
-      return line.coordinates
-          .map((e) => [e.lng.toDouble(), e.lat.toDouble()])
-          .toList();
-    }).toList();
-
-    tree.load(line1Segments);
-    return FeatureRBush._(tree);
-  }
-
-  FeatureCollection<LineString> searchArea(Feature<LineString> segment) {
-    final coordinates = segment.geometry!.coordinates
-        .map((e) => [e.lng.toDouble(), e.lat.toDouble()])
-        .toList();
-
-    //final searchArea = RBushBox.fromList(_bbox(segment.geometry.coordinates));
-    //final segment1 = <List<double>>[
-    //  [115, -25],
-    //  [125, -30]
-    //];
-
-    final searchArea = RBushBox.fromList(_bbox(coordinates));
-    final result = _tree.search(searchArea);
-
-    final features = result.map(
-      (e) {
-        final positions = e.map((e) => Position.of(e)).toList();
-        final feature = Feature(geometry: LineString(coordinates: positions));
-        return feature;
-      },
-    ).toList();
-
-    final segmentsWithinSameBox = FeatureCollection<LineString>(
-      features: features,
-    );
-    return segmentsWithinSameBox;
-  }
-
-  static List<double> _bbox(List<List<double>> coordinates) {
-    var minX = double.infinity; // lat1
-    var minY = double.infinity; // lng1
-    var maxX = double.negativeInfinity; // lat2
-    var maxY = double.negativeInfinity; // lng2
-
-    for (List<double> coordinate in coordinates) {
-      double x = coordinate[0];
-      double y = coordinate[1];
-
-      if (x < minX) minX = x;
-      if (y < minY) minY = y;
-      if (x > maxX) maxX = x;
-      if (y > maxY) maxY = y;
-    }
-
-    return [minX, minY, maxX, maxY];
-  }
-}
 
 /// Takes any [LineString], [MultiLineString], [Polygon] or [MultiPolygon] and
 /// returns the overlapping lines between both features.
@@ -136,251 +25,159 @@ FeatureCollection<LineString> lineOverlap(
   num tolerance = 0,
   Unit unit = Unit.kilometers,
 }) {
-  /*
-  RBushBox toRBBox(Feature<LineString> feature) {
-    // ToDo: only works if feature is a 2d line string of 4 coordinates
-    // will not work, if the line string has altitude information.
-    // final listOfCoordinates = box.toList();
+  final result = <Feature<LineString>>[];
+  final tree = _FeatureRBush.create(lineSegment(feature1));
 
-    final box = bbox(feature);
-    // minX,     minY,     maxX,     maxY
-    final listOfCoordinates = [box.lat1, box.lng1, box.lat1, box.lng1];
-    final rBushBox = RBushBox.fromList(listOfCoordinates);
-    //final rBushBox = RBushBox.fromList(bbox(feature).toList());
-    return rBushBox;
-  }*/
+  // Iterate over segments of feature1
+  segmentEach(feature2, (Feature<LineString> segmentF2, _, __, ___, ____) {
+    // detect segments of feature1, that falls within the same
+    // bonds of the current feature2 segment
+    featureEach(tree.searchArea(segmentF2), (Feature current, _) {
+      final segmentF1 = current as Feature<LineString>;
 
-  // Create Spatial Index
-  /*final tree = RBushBase<Feature<LineString>>(
-    maxEntries: 4,
-    getMinX: (Feature<LineString> feature) {
-      // final minX = bbox(feature).lng1.toDouble();
-      final minX = toRBBox(feature).minX;
-      return minX;
-    },
-    getMinY: (Feature<LineString> feature) {
-      // final minY = bbox(feature).lat1.toDouble();
-      final minY = toRBBox(feature).minY;
-      return minY;
-    },
-    toBBox: toRBBox,
-  );
-  final line1Segements = lineSegment(line1);
-  logCollection("line1 segments:", line1Segements);
-  tree.load(line1Segements.features);
-  */
-  final tree = FeatureRBush.create(lineSegment(feature1));
-
-  // Detect Line Intersection
-
-  // Containers
-  final features = <Feature<LineString>>[];
-
-  //Feature<LineString>? result;
-
-  logFeature("line1:", feature1);
-  logFeature("line2:", feature2);
-
-  // Iterate over segments of line2
-  segmentEach(feature2, (Feature<LineString> segment, _, __, ___, ____) {
-    //bool overlapping = false;
-
-    //List<Feature<LineString>> deferredOverlappingSegments = [];
-    final segmentCoords = getCoorsSorted(segment);
-    final segmentLine = segment.geometry as LineString;
-
-    logFeature("line2 segment:", segment);
-
-    // detect segments of line1, that falls within the same
-    // bonds of the current line2 segment
-    // final segmentsWithinSameBox = FeatureCollection<LineString>(
-    //  features: tree.search(toRBBox(segment)),
-    //);
-    final segmentsWithinSameBox = tree.searchArea(segment);
-    logCollection("segmentsWithinSameBox:", segmentsWithinSameBox);
-    featureEach(segmentsWithinSameBox, (Feature current, _) {
-      final match = current as Feature<LineString>;
-      final matchCoords = getCoorsSorted(match);
-      final matchLine = match.geometry as LineString;
-
-      logFeature("line1 match segment:", current);
-
-      //print("segmentCoords:");
-      //print(jsonEncode(segmentCoords.map((e) => e.toJson()).toList()));
-
-      //print("matchCoords:");
-      //print(jsonEncode(matchCoords.map((e) => e.toJson()).toList()));
-
-      final isSubset = _equal(segmentCoords, matchCoords) ||
-          positionsOnLine(segmentCoords, matchLine, tolerance, unit);
-
-      // Is the outer line2 segment a subset of the line1 segment?
-      if (isSubset) {
-        // add the complete segment to the overlapping result
-
-        //final combined = concatSegment(result, segment);
-        //final segmentIsNotConnectedWithResult = combined == null;
-        //if (segmentIsNotConnectedWithResult) {
-        //  features.add(result!);
-        //  result = segment;
-        //} else {
-        //  result = combined;
-        //}
-        final result = concatSegmentToFeatures(features, segment);
-        logFeature("isSubset, result: ", result);
-
-        // ToDo: we should be able to add the complete line1 segment to the result
-        // and ignore the current value.
-        // result = segment;
-        //overlapping = true;
-
-        // ToDo (Issue #901):
-        // The segment is a subset but it could be, that the neither the
-        // start nor the end point is the same. In this case the segment is
-        // not concatenated to the result. This is a known issue.
-        // assert(combined == null);
-
-        // Add the complete line2 segment to the result and stop the loop.
+      // Are the current segments equal?
+      if (booleanEqual(segmentF2, segmentF1)) {
+        // add the complete segment to the result
+        _addSegmentToResult(result, segmentF2);
+        // continue with the next feature2 segment
         return false;
       }
 
-      // The line2 segment is not a subset of line1 segment. Check if line1
-      // segment is a subset of line2 segment.
-      if (positionsOnLine(matchCoords, segmentLine, tolerance, unit)) {
-        print("positionsOnLine");
-        // Add the line1 segment to the overlapping result.
-        //final combined = concatSegment(result, match);
-        //final segmentIsNotConnectedWithResult = combined == null;
-        //if (segmentIsNotConnectedWithResult) {
-        //  print("combined == null, add deferred");
-        // Current line1 segment is a subset of line2 segment, but it isn't
-        // connected to the result via start or end point.
-        // We're adding it later to the result.
-        //  deferredOverlappingSegments.add(match);
+      // Is the segment of feature2 a subset of the feature1 segment?
+      if (_isSegmentOnLine(segmentF2, segmentF1, tolerance, unit)) {
+        // add the complete segment to the result
+        _addSegmentToResult(result, segmentF2);
+        // continue with the next feature2 segment
+        return false;
+      }
 
-        //features.add(result!);
-        //result = segment;
-        //} else {
-        //  print("combined as result");
-        //  result = combined;
-        //}
+      // Is the segment of feature1 a subset of the feature2 segment?
+      if (_isSegmentOnLine(segmentF1, segmentF2, tolerance, unit)) {
+        // add only the overlapping part
+        _addSegmentToResult(result, segmentF1);
+        // and continue with the next feature1 segment
+        return true;
+      }
 
-        final result = concatSegmentToFeatures(features, match);
-        logFeature("!overlapping, result: ", result);
+      // If the segments of feature1 and feature2 didn't share any point and
+      // the lines are overlapping partially, then we need to create a new
+      // line segment with the overlapping part and add it to the result.
+      final overlappingPart =
+          _getOverlappingPart(segmentF2, segmentF1, tolerance, unit) ??
+              _getOverlappingPart(segmentF1, segmentF2, tolerance, unit);
+      if (overlappingPart != null) {
+        // add only the overlapping part
+        _addSegmentToResult(result, overlappingPart);
+        // and continue with the next feature1 segment
+        return true;
       }
     });
-
-    // Segment doesn't overlap - add overlaps to results & reset
-    //if (overlapping == false && result != null) {
-    //  features.add(result!);
-    //  result = null;
-    //
-    //  if (deferredOverlappingSegments.isNotEmpty) {
-    //    features.addAll(deferredOverlappingSegments);
-    //    deferredOverlappingSegments = [];
-    //  }
-    //}
   });
 
-  //if (result != null) {
-  //  features.add(result!);
-  //  result = null;
-  //if (!overlapping) {
-  //   features.addAll(deferredOverlappingSegments);
-  //   deferredOverlappingSegments = [];
-  // }
-  //}
-
-  // This seems wrong to me. If we are adding the result to the feature, when
-  // overlapping is true, then doesn't need to add it here. Another point is,
-  // that if we have an overlapping segment for line2 and then an not overlapping
-  // segment, that means, that the overlapping segment is not added to the result.
-  // Add last segment if exists
-  //if (result != null) features.add(result!);
-
-  return FeatureCollection(features: features);
-
-  // ToDo: check if the false return really ends the loop,
-  // if so, move this statement to the end. Maybe add a test for this.
-  // featureEach
+  return FeatureCollection(features: result);
 }
 
-List<Position> getCoorsSorted(Feature feature) {
-  int byPosition(Position a, Position b) {
-    return a.lng < b.lng
-        ? -1
-        : a.lng > b.lng
-            ? 1
-            : 0;
-  }
-
-  final positions = getCoords(feature) as List<Position>;
-  positions.sort(byPosition);
-  return positions;
-}
-
-bool positionsOnLine(
-  List<Position> coords,
-  LineString line,
+// If both lines didn't share any point, but
+// - the start point of the second line is on the first line and
+// - the end point of the first line is on the second line and
+// - startPoint and endPoint are different,
+// we can assume, that both lines are overlapping partially.
+// first:        .-----------.
+// second:             .-----------.
+// startPoint:         .
+// endPoint:                 .
+// This solves the issue #901 and #2580 of TurfJs.
+Feature<LineString>? _getOverlappingPart(
+  Feature<LineString> first,
+  Feature<LineString> second,
   num tolerance,
   Unit unit,
 ) {
-  final firstPoint = Point(coordinates: coords[0]);
-  final secondPoint = Point(coordinates: coords[1]);
+  final firstCoords = _getCoorsSorted(first);
+  final secondCoords = _getCoorsSorted(second);
+  final startPoint = Point(coordinates: secondCoords.first);
+  final endPoint = Point(coordinates: firstCoords.last);
 
-  bool isPointOnLine(Point point, LineString line) {
-    if (tolerance == 0) {
-      return booleanPointOnLine(point, line);
-    }
-    final nearestPoint = nearestPointOnLine(line, point, unit);
-    return nearestPoint.properties!['dist'] <= tolerance;
+  assert(firstCoords.length == 2, 'only 2 vertex lines are supported');
+  assert(secondCoords.length == 2, 'only 2 vertex lines are supported');
+
+  if (startPoint != endPoint &&
+      _isPointOnLine(startPoint, first, tolerance, unit) &&
+      _isPointOnLine(endPoint, second, tolerance, unit)) {
+    return Feature(
+      geometry: LineString(coordinates: [
+        startPoint.coordinates,
+        endPoint.coordinates,
+      ]),
+    );
   }
-
-  final firstPointOnLine = isPointOnLine(firstPoint, line);
-  final secondPointOnLine = isPointOnLine(secondPoint, line);
-
-  logCollection(
-      "positions on line? first=$firstPointOnLine, second=$secondPointOnLine",
-      FeatureCollection<GeometryObject>(features: [
-        Feature<Point>(geometry: firstPoint),
-        Feature<Point>(geometry: secondPoint),
-        Feature<LineString>(geometry: line),
-      ]));
-
-  return firstPointOnLine && secondPointOnLine;
+  return null;
 }
 
-Feature<LineString> concatSegmentToFeatures(
+List<Position> _getCoorsSorted(Feature feature) {
+  final positions = getCoords(feature) as List<Position>;
+  positions.sort((a, b) => a.lng < b.lng
+      ? -1
+      : a.lng > b.lng
+          ? 1
+          : 0);
+  return positions;
+}
+
+bool _isPointOnLine(
+  Point point,
+  Feature<LineString> line,
+  num tolerance,
+  Unit unit,
+) {
+  final lineString = line.geometry as LineString;
+
+  if (tolerance == 0) {
+    return booleanPointOnLine(point, lineString);
+  }
+  final nearestPoint = nearestPointOnLine(lineString, point, unit);
+  return nearestPoint.properties!['dist'] <= tolerance;
+}
+
+bool _isSegmentOnLine(
+  Feature<LineString> segment,
+  Feature<LineString> line,
+  num tolerance,
+  Unit unit,
+) {
+  final segmentCoords = getCoords(segment) as List<Position>;
+  for (var i = 0; i < segmentCoords.length; i++) {
+    final point = Point(coordinates: segmentCoords[i]);
+    if (!_isPointOnLine(point, line, tolerance, unit)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void _addSegmentToResult(
   List<Feature<LineString>> result,
   Feature<LineString> segment,
 ) {
+  // Only add the geometry to the result and remove the feature meta data
+  final lineSegment = Feature<LineString>(geometry: segment.geometry);
+
+  // find the feature that can be concatenated with the current segment
   for (var i = result.length - 1; i >= 0; i--) {
-    final currentOverlap = result[i];
-    final combined = concatSegment(currentOverlap, segment);
-    final segmentsConnected = combined != null;
-    if (segmentsConnected) {
-      // ToDo: Check if this is necessary.
+    final combined = _concat(result[i], lineSegment);
+    if (combined != null) {
       result[i] = combined;
-      return result[i];
+      return;
     }
   }
-  result.add(segment);
-  return segment;
+  // if no feature was found, add the segment as a new feature
+  result.add(lineSegment);
 }
 
-/// Concat Segment
-/// Concatenates a line with multiple positions with a
-/// 2-vertex line segment.
-/// returns null, if line and segment are not connected.
-/// otherwise the concatenated line.
-// * @param {Feature<LineString>} segment 2-vertex LineString
-//  * @returns {Feature<LineString>} concat lineString
-Feature<LineString>? concatSegment(
-  Feature<LineString>? line,
+Feature<LineString>? _concat(
+  Feature<LineString> line,
   Feature<LineString> segment,
 ) {
-  if (line == null) return segment;
-
   final lineCoords = getCoords(line) as List<Position>;
   final segmentCoords = getCoords(segment) as List<Position>;
   assert(lineCoords.length >= 2, 'line must have at least two coordinates.');
@@ -388,8 +185,8 @@ Feature<LineString>? concatSegment(
 
   final lineStart = lineCoords.first;
   final lineEnd = lineCoords.last;
-  final segmentStart = segmentCoords[0];
-  final segmentEnd = segmentCoords[1];
+  final segmentStart = segmentCoords.first;
+  final segmentEnd = segmentCoords.last;
 
   List<Position> linePositions =
       (line.geometry as LineString).clone().coordinates;
@@ -403,10 +200,79 @@ Feature<LineString>? concatSegment(
   } else if (segmentEnd == lineEnd) {
     linePositions.add(segmentStart);
   } else {
-    // If the overlap leaves the segment unchanged, return null so that this can be
-    // identified.
+    // Segment couldn't be concatenated, because the segment didn't
+    // share any point with the line.
     return null;
   }
 
   return Feature(geometry: LineString(coordinates: linePositions));
+}
+
+// The RBush Package generally supports own types for the spatial index.
+// Something like RBushBase<Feature<LineString>> should be possible, but
+// I had problems to get it to work. This is a workaround until I have the
+// time to figure out how to use the RBush Package with the Feature<LineString>
+class _FeatureRBush {
+  _FeatureRBush._(this._tree);
+  final RBushBase<List<List<double>>> _tree;
+  static _FeatureRBush create(FeatureCollection<LineString> segments) {
+    final tree = RBushBase<List<List<double>>>(
+      maxEntries: 4,
+      toBBox: (segment) => _boundingBoxOf(segment),
+      getMinX: (segment) => _boundingBoxOf(segment).minX,
+      getMinY: (segment) => _boundingBoxOf(segment).minY,
+    );
+
+    final line1Segments = segments.features.map((e) {
+      final line = e.geometry as LineString;
+      return line.coordinates
+          .map((e) => [e.lng.toDouble(), e.lat.toDouble()])
+          .toList();
+    }).toList();
+
+    tree.load(line1Segments);
+    return _FeatureRBush._(tree);
+  }
+
+  FeatureCollection<LineString> searchArea(Feature<LineString> segment) {
+    final coordinates = segment.geometry!.coordinates
+        .map((e) => [e.lng.toDouble(), e.lat.toDouble()])
+        .toList();
+    return _buildFeatureCollection(_tree.search(_boundingBoxOf(coordinates)));
+  }
+
+  FeatureCollection<LineString> _buildFeatureCollection(
+    List<List<List<num>>> result,
+  ) {
+    return FeatureCollection<LineString>(
+      features: result
+          .map(
+            (e) => Feature(
+              geometry: LineString(
+                coordinates: e.map((e) => Position.of(e)).toList(),
+              ),
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  static RBushBox _boundingBoxOf(List<List<double>> coordinates) {
+    var minX = double.infinity; // lat1
+    var minY = double.infinity; // lng1
+    var maxX = double.negativeInfinity; // lat2
+    var maxY = double.negativeInfinity; // lng2
+
+    for (List<double> coordinate in coordinates) {
+      double x = coordinate[0];
+      double y = coordinate[1];
+
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+
+    return RBushBox.fromList([minX, minY, maxX, maxY]);
+  }
 }

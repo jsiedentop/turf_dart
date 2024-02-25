@@ -3,6 +3,7 @@ import 'package:turf/helpers.dart';
 import 'package:turf/src/booleans/boolean_helper.dart';
 import 'package:turf/src/booleans/boolean_within.dart';
 import '../context/helper.dart';
+import '../context/load_test_cases.dart';
 
 void main() {
   group('within - true', () {
@@ -37,7 +38,7 @@ void main() {
       );
     });
 
-    test('within - point in multipoligon with hole', () {
+    test('within - point in multipolygon with hole', () {
       loadGeoJson(
           './test/examples/booleans/point_in_polygon/in/multipoly-with-hole.geojson',
           (path, geoJson) {
