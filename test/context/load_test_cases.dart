@@ -21,9 +21,7 @@ void loadGeoJsonFiles(
     if (file is File && file.path.endsWith('.geojson')) {
       if (file.path.contains('skip')) continue;
 
-      final content = file.readAsStringSync();
-      final geoJson = GeoJSONObject.fromJson(jsonDecode(content));
-      test(file.path, geoJson);
+      loadGeoJson(file.path, test);
     }
   }
 }

@@ -7,12 +7,11 @@ import '../context/load_test_cases.dart';
 import '../context/matcher.dart' as geo;
 
 void main() {
-  group('lineOverlap - partial lines', () {
+  group('lineOverlap', () {
     final first = lineString([
       [100, -30],
       [150, -30],
     ]);
-
     test('inner part', () {
       final second = lineString([
         [110, -30],
@@ -23,7 +22,6 @@ void main() {
       expect(lineOverlap(first, second), geo.equals(expected));
       expect(lineOverlap(second, first), geo.equals(expected));
     });
-
     test('start part', () {
       final second = lineString([
         [100, -30],
@@ -34,7 +32,6 @@ void main() {
       expect(lineOverlap(first, second), geo.equals(expected));
       expect(lineOverlap(second, first), geo.equals(expected));
     });
-
     test('two inner segments', () {
       final second = lineString([
         [110, -30],
@@ -46,7 +43,6 @@ void main() {
       expect(lineOverlap(first, second), geo.equals(expected));
       expect(lineOverlap(second, first), geo.equals(expected));
     });
-
     test('multiple segments on the same line', () {
       final first = lineString([
         [0, 1],
@@ -79,7 +75,6 @@ void main() {
       expect(lineOverlap(first, second), geo.equals(expected));
       expect(lineOverlap(second, first), geo.equals(expected));
     });
-
     test('partial overlap', () {
       // bug: https://github.com/Turfjs/turf/issues/2580
       final second = lineString([
@@ -97,7 +92,6 @@ void main() {
       expect(lineOverlap(first, second), geo.equals(expected));
       expect(lineOverlap(second, first), geo.equals(expected));
     });
-
     test('two separate inner segments', () {
       final second = lineString([
         [140, -30],
@@ -124,9 +118,32 @@ void main() {
       expect(lineOverlap(first, second), geo.equals(expected));
       expect(lineOverlap(second, first), geo.equals(expected));
     });
+    test('validate tolerance', () {
+      final first = lineString([
+        [10.0, 0.1],
+        [11.0, 0.1]
+      ]);
+      final second = lineString([
+        [10.0, 0.0],
+        [11.0, 0.0]
+      ]);
+
+      final expected = featureCollection([first]);
+      final actual = lineOverlap(
+        first,
+        second,
+        tolerance: 12.0,
+        unit: Unit.kilometers,
+      );
+
+      //expect(
+      //  actual,
+      //  geo.equals(expected),
+      //);
+    });
   });
 
-  group('lineOverlap', () {
+  group('lineOverlap - examples', () {
     loadTestCases("test/examples/line_overlap", (
       path,
       geoJsonGiven,
@@ -136,9 +153,9 @@ void main() {
       final second = geoJsonGiven.features[1];
       final expectedCollection = geoJsonExpected as FeatureCollection;
 
-      // if there is an overlap, geoJsonExpected has 3 Features where the
-      // first is the overlapping line. If there are only 2 features in the
-      // collection, there is no overlap.
+      // The last 2 features are equal to the given input. If there are only 2
+      // features in the collection it means, that we expect an empty result.
+      // Otherwise the remaining features are expected.
       final expected = expectedCollection.features.length == 2
           ? featureCollection()
           : featureCollection(

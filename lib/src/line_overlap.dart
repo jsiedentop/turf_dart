@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:rbush/rbush.dart';
 import 'package:turf/boolean.dart';
 import 'package:turf/line_segment.dart';
@@ -26,7 +28,7 @@ FeatureCollection<LineString> lineOverlap(
   Unit unit = Unit.kilometers,
 }) {
   final result = <Feature<LineString>>[];
-  final tree = _FeatureRBush.create(lineSegment(feature1));
+  final tree = _FeatureRBush.create(lineSegment(feature1), tolerance, unit);
 
   // Iterate over segments of feature1
   segmentEach(feature2, (Feature<LineString> segmentF2, _, __, ___, ____) {
@@ -213,32 +215,48 @@ Feature<LineString>? _concat(
 // I had problems to get it to work. This is a workaround until I have the
 // time to figure out how to use the RBush Package with the Feature<LineString>
 class _FeatureRBush {
-  _FeatureRBush._(this._tree);
-  final RBushBase<List<List<double>>> _tree;
-  static _FeatureRBush create(FeatureCollection<LineString> segments) {
-    final tree = RBushBase<List<List<double>>>(
+  _FeatureRBush._(
+    List<List<List<double>>> segments,
+    this.tolerance,
+    this.unit,
+  ) {
+    _tree = RBushBase<List<List<double>>>(
       maxEntries: 4,
       toBBox: (segment) => _boundingBoxOf(segment),
       getMinX: (segment) => _boundingBoxOf(segment).minX,
       getMinY: (segment) => _boundingBoxOf(segment).minY,
     );
+    _tree.load(segments);
+  }
 
-    final line1Segments = segments.features.map((e) {
-      final line = e.geometry as LineString;
-      return line.coordinates
-          .map((e) => [e.lng.toDouble(), e.lat.toDouble()])
-          .toList();
-    }).toList();
+  late RBushBase<List<List<double>>> _tree;
+  final num tolerance;
+  final Unit unit;
 
-    tree.load(line1Segments);
-    return _FeatureRBush._(tree);
+  static _FeatureRBush create(
+    FeatureCollection<LineString> segments,
+    num tolerance,
+    Unit unit,
+  ) {
+    final converted = segments.features
+        .map((e) => (e.geometry as LineString)
+            .coordinates
+            .map((e) => [e.lng.toDouble(), e.lat.toDouble()])
+            .toList())
+        .toList();
+
+    return _FeatureRBush._(converted, tolerance, unit);
   }
 
   FeatureCollection<LineString> searchArea(Feature<LineString> segment) {
     final coordinates = segment.geometry!.coordinates
         .map((e) => [e.lng.toDouble(), e.lat.toDouble()])
         .toList();
-    return _buildFeatureCollection(_tree.search(_boundingBoxOf(coordinates)));
+    return _buildFeatureCollection(
+      _tree.search(
+        _boundingBoxOf(coordinates),
+      ),
+    );
   }
 
   FeatureCollection<LineString> _buildFeatureCollection(
@@ -257,22 +275,60 @@ class _FeatureRBush {
     );
   }
 
-  static RBushBox _boundingBoxOf(List<List<double>> coordinates) {
-    var minX = double.infinity; // lat1
-    var minY = double.infinity; // lng1
-    var maxX = double.negativeInfinity; // lat2
-    var maxY = double.negativeInfinity; // lng2
+  RBushBox _withTolerance(RBushBox box) {
+    final min = destination(
+      destination(
+        Point(
+          coordinates: Position.named(
+            lat: box.minX,
+            lng: box.minY,
+          ),
+        ),
+        tolerance,
+        180,
+        unit,
+      ),
+      tolerance,
+      270,
+      unit,
+    );
+
+    final max = destination(
+      destination(
+          Point(
+            coordinates: Position.named(
+              lat: box.maxX,
+              lng: box.maxY,
+            ),
+          ),
+          tolerance,
+          0,
+          unit),
+      tolerance,
+      90,
+      unit,
+    );
+
+    return RBushBox(
+      minX: min.coordinates.lat.toDouble(),
+      minY: min.coordinates.lng.toDouble(),
+      maxX: max.coordinates.lat.toDouble(),
+      maxY: max.coordinates.lng.toDouble(),
+    );
+  }
+
+  RBushBox _boundingBoxOf(List<List<double>> coordinates) {
+    final box = RBushBox();
 
     for (List<double> coordinate in coordinates) {
-      double x = coordinate[0];
-      double y = coordinate[1];
-
-      if (x < minX) minX = x;
-      if (y < minY) minY = y;
-      if (x > maxX) maxX = x;
-      if (y > maxY) maxY = y;
+      box.extend(RBushBox(
+        minX: coordinate[1], // lat1
+        minY: coordinate[0], // lng1
+        maxX: coordinate[1], // lat2
+        maxY: coordinate[0], // lng2
+      ));
     }
 
-    return RBushBox.fromList([minX, minY, maxX, maxY]);
+    return tolerance == 0 ? box : _withTolerance(box);
   }
 }

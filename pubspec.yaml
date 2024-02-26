@@ -16,11 +16,10 @@ dependencies:
 
 dependency_overrides:
   turf_equality:
-    path: ../turf_equality
-    #git:
-    #  url: https://github.com/dart-lang/sdk.git
-    #  path: pkg/_fe_analyzer_shared
-    #  ref: main
+    #path: ../turf_equality
+    git:
+      url: https://github.com/jsiedentop/turf_equality.git
+      ref: main
 
 dev_dependencies:
   lints: ^3.0.0
