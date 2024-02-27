@@ -33,7 +33,7 @@ void main() {
         'FeatureNotSupported',
         () => expect(
           () => booleanWithin(feature1, feature2),
-          throwsA(isA<FeatureNotSupported>()),
+          throwsA(isA<GeometryCombinationNotSupported>()),
         ),
       );
     });

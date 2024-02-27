@@ -1,9 +1,7 @@
-import 'dart:convert';
-
 import 'package:rbush/rbush.dart';
-import 'package:turf/boolean.dart';
 import 'package:turf/line_segment.dart';
 import 'package:turf/meta.dart';
+import 'package:turf/src/booleans/boolean_helper.dart';
 import 'package:turf/turf.dart';
 import 'invariant.dart';
 
@@ -27,6 +25,12 @@ FeatureCollection<LineString> lineOverlap(
   num tolerance = 0,
   Unit unit = Unit.kilometers,
 }) {
+  if (!_isGeometrySupported(getGeom(feature1)) ||
+      !_isGeometrySupported(getGeom(feature1))) {
+    throw GeometryCombinationNotSupported(
+        feature1.geometry!, feature2.geometry!);
+  }
+
   final result = <Feature<LineString>>[];
   final tree = _FeatureRBush.create(lineSegment(feature1), tolerance, unit);
 
@@ -38,7 +42,7 @@ FeatureCollection<LineString> lineOverlap(
       final segmentF1 = current as Feature<LineString>;
 
       // Are the current segments equal?
-      if (booleanEqual(segmentF2, segmentF1)) {
+      if (booleanEqual(segmentF2.geometry!, segmentF1.geometry!)) {
         // add the complete segment to the result
         _addSegmentToResult(result, segmentF2);
         // continue with the next feature2 segment
@@ -331,4 +335,14 @@ class _FeatureRBush {
 
     return tolerance == 0 ? box : _withTolerance(box);
   }
+}
+
+bool _isGeometrySupported(GeometryObject geometry) {
+  if (geometry is LineString ||
+      geometry is MultiLineString ||
+      geometry is Polygon ||
+      geometry is MultiPolygon) {
+    return true;
+  }
+  return false;
 }

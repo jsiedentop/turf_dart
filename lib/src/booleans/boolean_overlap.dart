@@ -1,150 +1,179 @@
-//Compares two geometries of the same dimension and returns true if their intersection set results in a geometry
-//different from both but of the same dimension. It applies to Polygon/Polygon, LineString/LineString,
-//Multipoint/Multipoint, MultiLineString/MultiLineString and MultiPolygon/MultiPolygon.
-//
-// In other words, it returns true if the two geometries overlap, provided that neither completely contains the other.
-//
-// @name booleanOverlap
-// @param  {Geometry|Feature<LineString|MultiLineString|Polygon|MultiPolygon>} feature1 input
-// @param  {Geometry|Feature<LineString|MultiLineString|Polygon|MultiPolygon>} feature2 input
-// @returns {boolean} true/false
-// @example
-// var poly1 = turf.polygon([[[0,0],[0,5],[5,5],[5,0],[0,0]]]);
-// var poly2 = turf.polygon([[[1,1],[1,6],[6,6],[6,1],[1,1]]]);
-// var poly3 = turf.polygon([[[10,10],[10,15],[15,15],[15,10],[10,10]]]);
-//
-// turf.booleanOverlap(poly1, poly2)
-// //=true
-// turf.booleanOverlap(poly2, poly3)
-// //=false
-
 import 'package:turf/helpers.dart';
 import 'package:turf/line_overlap.dart';
 import 'package:turf/line_segment.dart';
 import 'package:turf/src/invariant.dart';
-
+import 'package:turf/src/line_intersect.dart';
+import 'package:turf_equality/turf_equality.dart';
 import 'boolean_helper.dart';
 
+/// Takes two geometries [firstFeature] and [secondFeature] and checks if they
+/// share an common area but are not completely contained by each other.
+///
+/// Supported Geometries are `Feature<MultiPoint>`, `Feature<LineString>`,
+/// `Feature<MultiLineString>`, `Feature<Polygon>`, `Feature<MultiPolygon>`.
+/// Features must be of the same type. LineString/MultiLineString and
+/// Polygon/MultiPolygon combinations are supported. If the Geometries are not
+/// supported an [GeometryNotSupported] or [GeometryCombinationNotSupported]
+/// error is thrown.
+///
+/// Returns false if [firstFeature] and [secondFeature] are equal.
+/// - MultiPoint: returns Returns true if the two MultiPoints share any point.
+/// - LineString: returns true if the two Lines share any line segment.
+/// - Polygon: returns true if the two Polygons intersect.
+///
+/// Example:
+/// ```dart
+///  final first = Polygon(coordinates: [
+///    [
+///      Position(0, 0),
+///      Position(0, 5),
+///      Position(5, 5),
+///      Position(5, 0),
+///      Position(0, 0)
+///    ]
+///  ]);
+///  final second = Polygon(coordinates: [
+///    [
+///      Position(1, 1),
+///      Position(1, 6),
+///      Position(6, 6),
+///      Position(6, 1),
+///      Position(1, 1)
+///    ]
+///  ]);
+///  final third = Polygon(coordinates: [
+///    [
+///      Position(10, 10),
+///      Position(10, 15),
+///      Position(15, 15),
+///      Position(15, 10),
+///      Position(10, 10)
+///    ]
+///  ]);
+///
+/// final isOverlapping = booleanOverlap(first, second);
+/// final isNotOverlapping = booleanOverlap(second, third);
+/// ```
 bool booleanOverlap(
-  GeoJSONObject feature1,
-  GeoJSONObject feature2,
+  Feature firstFeature,
+  Feature secondFeature,
 ) {
-  var geom1 = getGeom(feature1);
-  var geom2 = getGeom(feature2);
+  var first = getGeom(firstFeature);
+  var second = getGeom(secondFeature);
 
-  // features must be not equal
-  // const equality = new GeojsonEquality({ precision: 6 });
-  // if (equality.compare(feature1 as any, feature2 as any)) return false;
-  //throw new Error("features must be of the same type");
+  _checkIfGeometryCombinationIsSupported(first, second);
 
-  switch (geom1.runtimeType) {
-    case Point:
-      throw FeatureNotSupported(geom1, geom2);
+  final eq = Equality(
+    reversedGeometries: true,
+    shiftedPolygons: true,
+  );
+  if (eq.compare(first, second)) {
+    return false;
+  }
+
+  switch (first.runtimeType) {
     case MultiPoint:
-      switch (geom2.runtimeType) {
+      switch (second.runtimeType) {
         case MultiPoint:
-          return isMultiPointOverlapping(
-            geom1 as MultiPoint,
-            geom2 as MultiPoint,
+          return _isMultiPointOverlapping(
+            first as MultiPoint,
+            second as MultiPoint,
           );
         default:
-          throw FeatureNotSupported(geom1, geom2);
-      }
-    case LineString:
-      switch (geom2.runtimeType) {
-        case LineString:
-        case MultiLineString:
-          return isLineStringOverlapping(
-            geom1 as LineString,
-            geom2 as LineString,
-          );
-        default:
-          throw FeatureNotSupported(geom1, geom2);
+          throw GeometryCombinationNotSupported(first, second);
       }
     case MultiLineString:
-      switch (geom2.runtimeType) {
+    case LineString:
+      switch (second.runtimeType) {
         case LineString:
         case MultiLineString:
-          return isLineStringOverlapping(
-            geom1 as LineString,
-            geom2 as LineString,
-          );
+          return _isLineOverlapping(first, second);
         default:
-          throw FeatureNotSupported(geom1, geom2);
-      }
-    case Polygon:
-      final polygon = geom1 as Polygon;
-      switch (geom2.runtimeType) {
-        case Polygon:
-        case MultiPolygon:
-          return isPolygonOverlapping(polygon, geom2 as Polygon);
-        default:
-          throw FeatureNotSupported(geom1, geom2);
+          throw GeometryCombinationNotSupported(first, second);
       }
     case MultiPolygon:
-      switch (geom2.runtimeType) {
+    case Polygon:
+      switch (second.runtimeType) {
         case Polygon:
         case MultiPolygon:
-        //return isMultiPolygonInPolygon(geom1 as MultiPolygon, geom2 as Polygon);
+          return _isPolygonOverlapping(first, second);
         default:
-          throw FeatureNotSupported(geom1, geom2);
+          throw GeometryCombinationNotSupported(first, second);
       }
     default:
-      throw FeatureNotSupported(geom1, geom2);
+      throw GeometryCombinationNotSupported(first, second);
   }
 }
 
-bool isMultiPointOverlapping(MultiPoint points1, MultiPoint points2) {
-  //return points1.coordinates.every(
-  //  (point1) => points2.coordinates.any(
-  //    (point2) => point1 == point2,
-  //  ),
-  //);
-  /*
-  for (var i = 0; i < (geom1 as MultiPoint).coordinates.length; i++) {
-        for (var j = 0; j < (geom2 as MultiPoint).coordinates.length; j++) {
-          var coord1 = geom1.coordinates[i];
-          var coord2 = geom2.coordinates[j];
-          if (coord1[0] === coord2[0] && coord1[1] === coord2[1]) {
-            return true;
-          }
-        }
-      }
-      return false;
-       */
-  throw UnimplementedError();
+bool _isGeometrySupported(GeometryObject geometry) =>
+    geometry is MultiPoint ||
+    geometry is LineString ||
+    geometry is MultiLineString ||
+    geometry is Polygon ||
+    geometry is MultiPolygon;
+
+void _checkIfGeometryCombinationIsSupported(
+  GeometryObject first,
+  GeometryObject second,
+) {
+  if (!_isGeometrySupported(first) || !_isGeometrySupported(second)) {
+    throw GeometryCombinationNotSupported(first, second);
+  }
 }
 
-bool isLineStringOverlapping(LineString line1, LineString line2) {
+void _checkIfGeometryIsSupported(GeometryObject geometry) {
+  if (!_isGeometrySupported(geometry)) {
+    throw GeometryNotSupported(geometry);
+  }
+}
+
+List<Feature<LineString>> _segmentsOfGeometry(GeometryObject geometry) {
+  _checkIfGeometryIsSupported(geometry);
+  List<Feature<LineString>> segments = [];
   segmentEach(
-    line1,
-    (segment1, _, __, ___, ____) {
-      segmentEach(
-        line2,
-        (segment2, _, __, ___, ____) {
-          if (lineOverlap(segment1, segment2).features.isNotEmpty) {
-            return true;
-          }
-        },
-      );
+    geometry,
+    (Feature<LineString> segment, _, __, ___, ____) {
+      segments.add(segment);
     },
   );
+  return segments;
+}
+
+bool _isLineOverlapping(GeometryObject firstLine, GeometryObject secondLine) {
+  for (final firstSegment in _segmentsOfGeometry(firstLine)) {
+    for (final secondSegment in _segmentsOfGeometry(secondLine)) {
+      if (lineOverlap(firstSegment, secondSegment).features.isNotEmpty) {
+        return true;
+      }
+    }
+  }
   return false;
 }
 
-bool isPolygonOverlapping(Polygon polygon1, Polygon polygon2) {
-  segmentEach(
-    polygon1,
-    (segment1, _, __, ___, ____) {
-      segmentEach(
-        polygon2,
-        (segment2, _, __, ___, ____) {
-          //if (lineIntersect(segment1, segment2).features.length) {
-          return true;
-          //}
-        },
-      );
-    },
-  );
-  throw UnimplementedError();
+bool _isPolygonOverlapping(
+  GeometryObject firstPolygon,
+  GeometryObject secondPolygon,
+) {
+  for (final firstSegment in _segmentsOfGeometry(firstPolygon)) {
+    for (final secondSegment in _segmentsOfGeometry(secondPolygon)) {
+      if (lineIntersect(firstSegment, secondSegment).features.isNotEmpty) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+bool _isMultiPointOverlapping(
+  MultiPoint first,
+  MultiPoint second,
+) {
+  for (final firstPoint in first.coordinates) {
+    for (final secondPoint in second.coordinates) {
+      if (firstPoint == secondPoint) {
+        return true;
+      }
+    }
+  }
+  return false;
 }

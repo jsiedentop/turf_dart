@@ -1,4 +1,5 @@
 import 'package:test/test.dart';
+import 'package:turf/helpers.dart';
 import 'package:turf/src/geojson.dart';
 import 'package:turf_equality/turf_equality.dart';
 
@@ -22,6 +23,32 @@ class _Equals<T extends GeoJSONObject> extends Matcher {
   }
 }
 
+Matcher contains(List<Feature> expected) => _Contains(expected);
+
+class _Contains extends Matcher {
+  _Contains(this.expected);
+  final List<Feature> expected;
+
+  @override
+  Description describe(Description description) {
+    return description.add('contains');
+  }
+
+  @override
+  bool matches(actual, Map matchState) {
+    if (actual is! FeatureCollection) throw UnimplementedError();
+
+    Equality eq = Equality();
+
+    for (var feature in expected) {
+      if (!actual.features.any((f) => eq.compare(f, feature))) {
+        return false;
+      }
+    }
+    return true;
+  }
+}
+
 Matcher length<T extends GeoJSONObject>(int length) => _Length<T>(length);
 
 class _Length<T extends GeoJSONObject> extends Matcher {
@@ -35,19 +62,26 @@ class _Length<T extends GeoJSONObject> extends Matcher {
 
   @override
   bool matches(actual, Map matchState) {
-    switch (actual.runtimeType) {
-      case FeatureCollection:
-        return (actual as FeatureCollection).features.length == length;
-      case GeometryCollection:
-        return (actual as GeometryCollection).geometries.length == length;
-      case MultiPoint:
-        return (actual as MultiPoint).coordinates.length == length;
-      case MultiPolygon:
-        return (actual as MultiPolygon).coordinates.length == length;
-      case MultiLineString:
-        return (actual as MultiLineString).coordinates.length == length;
-      default:
-        return false;
+    if (actual is FeatureCollection) {
+      return actual.features.length == length;
     }
+
+    if (actual is GeometryCollection) {
+      return actual.geometries.length == length;
+    }
+
+    if (actual is MultiPoint) {
+      return actual.coordinates.length == length;
+    }
+
+    if (actual is MultiPolygon) {
+      return actual.coordinates.length == length;
+    }
+
+    if (actual is MultiLineString) {
+      return actual.coordinates.length == length;
+    }
+
+    return false;
   }
 }

@@ -61,7 +61,7 @@ void main() {
         [6, 0],
       ]);
 
-      final expected = featureCollection([
+      final expected = [
         lineString([
           [1, 0],
           [2, 0]
@@ -70,10 +70,10 @@ void main() {
           [3, 0],
           [4, 0]
         ]),
-      ]);
+      ];
 
-      expect(lineOverlap(first, second), geo.equals(expected));
-      expect(lineOverlap(second, first), geo.equals(expected));
+      expect(lineOverlap(first, second), geo.contains(expected));
+      expect(lineOverlap(second, first), geo.contains(expected));
     });
     test('partial overlap', () {
       // bug: https://github.com/Turfjs/turf/issues/2580
@@ -119,6 +119,8 @@ void main() {
       expect(lineOverlap(second, first), geo.equals(expected));
     });
     test('validate tolerance', () {
+      // bug: https://github.com/Turfjs/turf/issues/2582
+      // distance between the lines are 11.x km
       final first = lineString([
         [10.0, 0.1],
         [11.0, 0.1]
@@ -128,18 +130,46 @@ void main() {
         [11.0, 0.0]
       ]);
 
-      final expected = featureCollection([first]);
-      final actual = lineOverlap(
-        first,
-        second,
-        tolerance: 12.0,
-        unit: Unit.kilometers,
+      final expected = featureCollection([second]);
+
+      expect(
+        lineOverlap(
+          first,
+          second,
+          tolerance: 12.0,
+        ),
+        geo.equals(expected),
       );
 
-      //expect(
-      //  actual,
-      //  geo.equals(expected),
-      //);
+      expect(
+        lineOverlap(
+          first,
+          second,
+          tolerance: 12.0,
+          unit: Unit.kilometers,
+        ),
+        geo.equals(expected),
+      );
+
+      expect(
+        lineOverlap(
+          first,
+          second,
+          tolerance: 11.0,
+          unit: Unit.kilometers,
+        ),
+        geo.length(0),
+      );
+
+      expect(
+        lineOverlap(
+          first,
+          second,
+          tolerance: 12.0,
+          unit: Unit.meters,
+        ),
+        geo.length(0),
+      );
     });
   });
 
@@ -165,7 +195,6 @@ void main() {
                   .toList(),
             );
       test(path, () {
-        print(path);
         final tolerance = first.properties?['tolerance'] ?? 0.0;
         final result = lineOverlap(first, second, tolerance: tolerance);
         expect(result, geo.equals(expected));

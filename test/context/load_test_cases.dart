@@ -1,6 +1,9 @@
+// ignore_for_file: use_rethrow_when_possible
+
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:test/test.dart';
 import 'package:turf/helpers.dart';
 
 void loadGeoJson(
@@ -23,6 +26,31 @@ void loadGeoJsonFiles(
 
       loadGeoJson(file.path, test);
     }
+  }
+}
+
+void loadBooleanTestCases(
+  String basePath,
+  void Function(
+    String path,
+    GeoJSONObject geoJson,
+    bool expected,
+  ) callback,
+) {
+  try {
+    loadGeoJsonFiles("$basePath/true", (path, geoJson) {
+      callback(path, geoJson, true);
+    });
+
+    loadGeoJsonFiles("$basePath/false", (path, geoJson) {
+      callback(path, geoJson, false);
+    });
+  } catch (e) {
+    test('loadBooleanTestCases', () {
+      expect(() {
+        throw e;
+      }, returnsNormally);
+    });
   }
 }
 

@@ -43,7 +43,7 @@ bool booleanWithin(
         case MultiPolygon:
           return isPointInMultiPolygon(point, geom2 as MultiPolygon);
         default:
-          throw FeatureNotSupported(geom1, geom2);
+          throw GeometryCombinationNotSupported(geom1, geom2);
       }
     case MultiPoint:
       final multipoint = geom1 as MultiPoint;
@@ -57,7 +57,7 @@ bool booleanWithin(
         case MultiPolygon:
           return isMultiPointInMultiPolygon(multipoint, geom2 as MultiPolygon);
         default:
-          throw FeatureNotSupported(geom1, geom2);
+          throw GeometryCombinationNotSupported(geom1, geom2);
       }
     case LineString:
       final line = geom1 as LineString;
@@ -69,7 +69,7 @@ bool booleanWithin(
         case MultiPolygon:
           return isLineInMultiPolygon(line, geom2 as MultiPolygon);
         default:
-          throw FeatureNotSupported(geom1, geom2);
+          throw GeometryCombinationNotSupported(geom1, geom2);
       }
     case Polygon:
       final polygon = geom1 as Polygon;
@@ -79,9 +79,9 @@ bool booleanWithin(
         case MultiPolygon:
           return isPolygonInMultiPolygon(polygon, geom2 as MultiPolygon);
         default:
-          throw FeatureNotSupported(geom1, geom2);
+          throw GeometryCombinationNotSupported(geom1, geom2);
       }
     default:
-      throw FeatureNotSupported(geom1, geom2);
+      throw GeometryCombinationNotSupported(geom1, geom2);
   }
 }
